@@ -5,6 +5,8 @@ let currentProduct = null;
 let editingUserId = null;
 let editingProductId = null;
 let firebaseInitialized = false;
+let uploadedImageUrl = null;
+let currentProductImage = null;
 
 // Inisialisasi Aplikasi
 document.addEventListener('DOMContentLoaded', function() {
@@ -23,7 +25,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.handleForgotPassword = handleForgotPassword;
     window.shareProduct = shareProduct;
     window.copyProductLink = copyProductLink;
-    window.shareProductNative = shareProductNative; // Added new function
+    window.shareProductNative = shareProductNative;
     window.loadMoreProducts = loadMoreProducts;
     window.showUpgradeModal = showUpgradeModal;
     window.confirmUpgrade = confirmUpgrade;
@@ -46,6 +48,8 @@ document.addEventListener('DOMContentLoaded', function() {
     window.exportUsers = exportUsers;
     window.filterProducts = filterProducts;
     window.closeModal = closeModal;
+    window.previewImage = previewImage;
+    window.removeCurrentImage = removeCurrentImage;
     
     console.log('Semua fungsi terdaftar secara global');
 });
@@ -56,9 +60,6 @@ async function initializeApp() {
         await window.firebaseService.initialize();
         firebaseInitialized = window.firebaseService.isInitialized();
         console.log('Firebase initialized:', firebaseInitialized);
-        
-        // Status indicator removed, so no update needed
-        // updateFirebaseStatus(firebaseInitialized);
         
         // Setup real-time sync
         if (firebaseInitialized) {
@@ -92,6 +93,13 @@ async function initializeApp() {
     
     // Setup auto-refresh untuk update real-time
     setInterval(checkForUpdates, 5000);
+    
+    // Initialize Firebase Storage when app starts
+    setTimeout(() => {
+        if (window.firebaseStorageService) {
+            window.firebaseStorageService.initialize();
+        }
+    }, 2000);
 }
 
 // Setup Real-time Sync
@@ -599,7 +607,7 @@ function copyProductLink() {
     }
 }
 
-// NEW: Native Share Function
+// Native Share Function
 function shareProductNative() {
     if (currentProduct && navigator.share) {
         const affiliateLink = `${currentProduct.url}?ref=${currentUser.id}`;
@@ -935,7 +943,7 @@ function loadAdminProducts() {
             <td>${formatCurrency(product.price)}</td>
             <td>${product.commission}%</td>
             <td>${product.url}</td>
-            <td>${product.image}</td>
+            <td><img src="${product.image}" alt="${product.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"></td>
             <td class="table-actions">
                 <button class="btn-edit" onclick="editProduct(${product.id})">
                     <i class="fas fa-edit"></i>
@@ -951,12 +959,23 @@ function loadAdminProducts() {
 
 function showAddProductForm() {
     editingProductId = null;
+    uploadedImageUrl = null;
+    currentProductImage = null;
+    
     document.getElementById('productFormTitle').textContent = 'Tambah Produk';
     document.getElementById('productName').value = '';
     document.getElementById('productPrice').value = '';
     document.getElementById('productCommission').value = '';
     document.getElementById('productUrl').value = '';
-    document.getElementById('productImageUrl').value = '';
+    
+    // Reset image upload
+    document.getElementById('productImage').value = '';
+    document.getElementById('imagePreview').innerHTML = `
+        <i class="fas fa-image"></i>
+        <p>Klik untuk upload gambar</p>
+    `;
+    document.getElementById('imagePreview').style.display = 'block';
+    document.getElementById('currentImage').style.display = 'none';
     
     document.getElementById('productFormModal').classList.add('active');
     document.getElementById('modalOverlay').classList.add('active');
@@ -968,78 +987,161 @@ function editProduct(productId) {
     
     if (product) {
         editingProductId = productId;
+        currentProductImage = product.image;
+        uploadedImageUrl = null;
+        
         document.getElementById('productFormTitle').textContent = 'Edit Produk';
         document.getElementById('productName').value = product.name;
         document.getElementById('productPrice').value = product.price;
         document.getElementById('productCommission').value = product.commission;
         document.getElementById('productUrl').value = product.url;
-        document.getElementById('productImageUrl').value = product.image;
+        
+        // Show current image
+        if (product.image) {
+            document.getElementById('currentImageImg').src = product.image;
+            document.getElementById('currentImage').style.display = 'block';
+            document.getElementById('imagePreview').style.display = 'none';
+        } else {
+            document.getElementById('currentImage').style.display = 'none';
+            document.getElementById('imagePreview').style.display = 'block';
+            document.getElementById('imagePreview').innerHTML = `
+                <i class="fas fa-image"></i>
+                <p>Klik untuk upload gambar</p>
+            `;
+        }
+        
+        document.getElementById('productImage').value = '';
         
         document.getElementById('productFormModal').classList.add('active');
         document.getElementById('modalOverlay').classList.add('active');
     }
 }
 
-function deleteProduct(productId) {
+async function deleteProduct(productId) {
     console.log('=== FUNGSI DELETE PRODUCT DIPANGGIL ===');
     console.log('deleteProduct dipanggil dengan productId:', productId);
     
     if (confirm('Apakah Anda yakin ingin menghapus produk ini?')) {
         console.log('User mengkonfirmasi penghapusan produk');
         const products = JSON.parse(localStorage.getItem('products')) || [];
-        const filteredProducts = products.filter(p => p.id !== productId);
-        localStorage.setItem('products', JSON.stringify(filteredProducts));
+        const productToDelete = products.find(p => p.id === productId);
         
-        // Sync ke Firebase
-        if (window.firebaseService && firebaseInitialized) {
-            window.firebaseService.updateProducts(filteredProducts);
+        try {
+            // Delete image from Firebase Storage if available
+            if (productToDelete?.image && window.firebaseStorageService?.isInitialized() && 
+                !productToDelete.image.startsWith('data:')) {
+                await window.firebaseStorageService.deleteImage(productToDelete.image);
+            }
+            
+            // Remove product from array
+            const filteredProducts = products.filter(p => p.id !== productId);
+            localStorage.setItem('products', JSON.stringify(filteredProducts));
+            
+            // Sync ke Firebase
+            if (window.firebaseService && firebaseInitialized) {
+                await window.firebaseService.updateProducts(filteredProducts);
+            }
+            
+            loadAdminProducts();
+            showToast('Produk berhasil dihapus!', 'success');
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            showToast('Gagal menghapus produk: ' + error.message, 'error');
         }
-        
-        console.log('Produk dihapus, memuat ulang tabel...');
-        loadAdminProducts();
-        showToast('Produk berhasil dihapus!', 'success');
     } else {
         console.log('User membatalkan penghapusan produk');
     }
     console.log('=== FUNGSI DELETE PRODUCT SELESAI ===');
 }
 
-function handleProductForm(event) {
+async function handleProductForm(event) {
     event.preventDefault();
     
     const products = JSON.parse(localStorage.getItem('products')) || [];
+    const fileInput = document.getElementById('productImage');
+    const file = fileInput.files[0];
     
-    const productData = {
-        name: document.getElementById('productName').value,
-        price: parseInt(document.getElementById('productPrice').value),
-        commission: parseInt(document.getElementById('productCommission').value),
-        url: document.getElementById('productUrl').value,
-        image: document.getElementById('productImageUrl').value
-    };
+    // Show loading
+    const submitBtn = event.target.querySelector('button[type="submit"]');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengupload...';
+    submitBtn.disabled = true;
     
-    if (editingProductId) {
-        // Edit produk yang ada
-        const productIndex = products.findIndex(p => p.id === editingProductId);
-        if (productIndex !== -1) {
-            products[productIndex] = { ...products[productIndex], ...productData };
+    let finalImageUrl = currentProductImage; // Default to existing image
+    
+    try {
+        // If new image is selected, upload it
+        if (file) {
+            // Initialize Firebase Storage
+            if (window.firebaseStorageService) {
+                await window.firebaseStorageService.initialize();
+            }
+            
+            // Upload to Firebase Storage if available
+            if (window.firebaseStorageService?.isInitialized()) {
+                const productId = editingProductId || Date.now();
+                finalImageUrl = await window.firebaseStorageService.uploadImage(file, productId);
+                
+                if (!finalImageUrl) {
+                    throw new Error('Failed to upload image to Firebase Storage');
+                }
+            } else {
+                // Fallback: convert to base64
+                finalImageUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            }
         }
-    } else {
-        // Tambah produk baru
-        productData.id = Date.now();
-        products.push(productData);
+        
+        const productData = {
+            name: document.getElementById('productName').value,
+            price: parseInt(document.getElementById('productPrice').value),
+            commission: parseInt(document.getElementById('productCommission').value),
+            url: document.getElementById('productUrl').value,
+            image: finalImageUrl
+        };
+        
+        if (editingProductId) {
+            // Edit existing product
+            const productIndex = products.findIndex(p => p.id === editingProductId);
+            if (productIndex !== -1) {
+                // Delete old image if new one uploaded and Firebase Storage is available
+                if (file && window.firebaseStorageService?.isInitialized() && 
+                    products[productIndex].image && !products[productIndex].image.startsWith('data:')) {
+                    await window.firebaseStorageService.deleteImage(products[productIndex].image);
+                }
+                
+                products[productIndex] = { ...products[productIndex], ...productData };
+            }
+        } else {
+            // Add new product
+            productData.id = Date.now();
+            products.push(productData);
+        }
+        
+        localStorage.setItem('products', JSON.stringify(products));
+        
+        // Sync ke Firebase
+        if (window.firebaseService && firebaseInitialized) {
+            await window.firebaseService.updateProducts(products);
+        }
+        
+        loadAdminProducts();
+        loadProducts();
+        showToast('Produk berhasil disimpan!', 'success');
+        closeModal();
+        
+    } catch (error) {
+        console.error('Error saving product:', error);
+        showToast('Gagal menyimpan produk: ' + error.message, 'error');
+    } finally {
+        // Restore button
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
     }
-    
-    localStorage.setItem('products', JSON.stringify(products));
-    
-    // Sync ke Firebase
-    if (window.firebaseService && firebaseInitialized) {
-        window.firebaseService.updateProducts(products);
-    }
-    
-    loadAdminProducts();
-    loadProducts(); // Refresh produk user
-    showToast('Produk berhasil disimpan!', 'success');
-    closeModal();
 }
 
 function loadSettings() {
@@ -1167,81 +1269,231 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Testimonials
+// Testimonials - Auto Generate New Testimonials
 function generateTestimonials() {
-    const testimonials = [
-        { name: 'Budi Santoso', text: 'Sudah 3 bulan bergabung, komisi selalu tepat waktu!' },
-        { name: 'Siti Nurhaliza', text: 'Mudah sekali dapat uang dari HP, recommended!' },
-        { name: 'Ahmad Fauzi', text: 'Program affiliate terbaik yang pernah saya ikuti.' },
-        { name: 'Dewi Lestari', text: 'Komisi besar dan produknya berkualitas.' },
-        { name: 'Rudi Hermawan', text: 'Sudah withdraw 5 kali, lancar semua!' },
-        { name: 'Maya Sari', text: 'Modal HP saja sudah bisa dapat penghasilan.' },
-        { name: 'Doni Prasetyo', text: 'Admin responsif, komisi selalu dibayar.' },
-        { name: 'Lina Wijaya', text: 'Produknya laku keras, gampang jualnya.' },
-        { name: 'Hendra Kusuma', text: 'Best affiliate program 2025 memang ini!' },
-        { name: 'Ratna Permata', text: 'Dari nol sekarang sudah punya penghasilan tetap.' },
-        { name: 'Fajar Nugroho', text: 'Upgrade membership worth it banget!' },
-        { name: 'Indah Puspita', text: 'Sistemnya transparan, komisi jelas.' },
-        { name: 'Bayu Setiawan', text: 'Rekomendasi banget buat cari tambahan.' },
-        { name: 'Sarah Amalia', text: 'Sudah beli motor dari komisi affiliate.' },
-        { name: 'Rizki Hidayat', text: 'Program yang bagus dan terpercaya.' }
-    ];
-    
     const track = document.getElementById('testimonialsTrack');
-    if (track) {
+    if (!track) return;
+
+    // Array untuk menyimpan testimonials
+    let testimonials = [];
+    
+    // Load existing testimonials from localStorage
+    const savedTestimonials = localStorage.getItem('testimonials');
+    if (savedTestimonials) {
+        testimonials = JSON.parse(savedTestimonials);
+    } else {
+        // Initial testimonials
+        testimonials = [
+            { id: 1, name: 'Budi Santoso', text: 'Sudah 3 bulan bergabung, komisi selalu tepat waktu!', rating: 5, timestamp: Date.now() - 3600000 },
+            { id: 2, name: 'Siti Nurhaliza', text: 'Mudah sekali dapat uang dari HP, recommended!', rating: 5, timestamp: Date.now() - 7200000 },
+            { id: 3, name: 'Ahmad Fauzi', text: 'Program affiliate terbaik yang pernah saya ikuti.', rating: 5, timestamp: Date.now() - 10800000 },
+            { id: 4, name: 'Dewi Lestari', text: 'Komisi besar dan produknya berkualitas.', rating: 5, timestamp: Date.now() - 14400000 },
+            { id: 5, name: 'Rudi Hermawan', text: 'Sudah withdraw 5 kali, lancar semua!', rating: 5, timestamp: Date.now() - 18000000 }
+        ];
+    }
+
+    // Array of random names and testimonial texts
+    const firstNames = ['Budi', 'Siti', 'Ahmad', 'Dewi', 'Rudi', 'Maya', 'Doni', 'Lina', 'Hendra', 'Sarah', 'Fajar', 'Indah', 'Bayu', 'Ratna', 'Rizki', 'Andi', 'Diana', 'Eko', 'Fitri', 'Gilang'];
+    const lastNames = ['Santoso', 'Nurhaliza', 'Fauzi', 'Lestari', 'Hermawan', 'Sari', 'Prasetyo', 'Wijaya', 'Kusuma', 'Amalia', 'Nugroho', 'Puspita', 'Setiawan', 'Permata', 'Hidayat', 'Susanto', 'Kartika', 'Pratama', 'Handayani', 'Wibowo'];
+    
+    const testimonialTexts = [
+        'Program affiliate terpercaya dan membayar!',
+        'Komisi selalu tepat waktu, sangat puas!',
+        'Mudah dapat uang hanya dari HP!',
+        'Produk berkualitas, komisi besar!',
+        'Sudah withdraw berkali-kali, lancar semua!',
+        'Recommended banget untuk cari tambahan!',
+        'Admin responsif, sistem transparan!',
+        'Modal HP saja sudah bisa hasilkan jutaan!',
+        'Best affiliate program di Indonesia!',
+        'Komisi besar, produk laku keras!',
+        'Sudah beli motor dari komisi ini!',
+        'Upgrade membership worth it banget!',
+        'Sistemnya bagus dan terpercaya!',
+        'Dari nol sekarang punya penghasilan tetap!',
+        'Rekomendasi banget buat pemula!',
+        'Admin ramah, komisi selalu dibayar!',
+        'Produknya mudah dijual, komisi besar!',
+        'Sudah 6 bulan bergabung, tidak pernah kecewa!',
+        'Program yang mengubah hidup saya!',
+        'Komisi jutaan setiap bulan, mantap!'
+    ];
+
+    // Function to generate random name
+    function generateRandomName() {
+        const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+        const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+        return `${firstName} ${lastName}`;
+    }
+
+    // Function to generate random testimonial
+    function generateNewTestimonial() {
+        const newTestimonial = {
+            id: Date.now(),
+            name: generateRandomName(),
+            text: testimonialTexts[Math.floor(Math.random() * testimonialTexts.length)],
+            rating: 5, // Always 5 stars for positive impression
+            timestamp: Date.now()
+        };
+        
+        // Add to beginning of array
+        testimonials.unshift(newTestimonial);
+        
+        // Keep only last 20 testimonials
+        if (testimonials.length > 20) {
+            testimonials = testimonials.slice(0, 20);
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('testimonials', JSON.stringify(testimonials));
+        
+        // Update display
+        updateTestimonialsDisplay();
+    }
+
+    // Function to update display
+    function updateTestimonialsDisplay() {
         track.innerHTML = '';
         
-        // Generate testimonials dua kali untuk scroll yang mulus
-        [...testimonials, ...testimonials].forEach((testimonial, index) => {
+        // Create two sets for smooth scrolling
+        const doubledTestimonials = [...testimonials, ...testimonials];
+        
+        doubledTestimonials.forEach((testimonial, index) => {
+            const isNew = index < testimonials.length && 
+                          (Date.now() - testimonial.timestamp) < 4000; // New if less than 4 seconds old
+            
             const card = document.createElement('div');
-            card.className = 'testimonial-card';
+            card.className = `testimonial-card ${isNew ? 'new' : ''}`;
             card.innerHTML = `
                 <div class="testimonial-header">
                     <div class="testimonial-avatar">${testimonial.name.charAt(0)}</div>
                     <div>
                         <div class="testimonial-name">${testimonial.name}</div>
                         <div class="testimonial-rating">
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
-                            <i class="fas fa-star" style="color: gold;"></i>
+                            ${generateStars(testimonial.rating)}
+                            ${isNew ? '<span class="new-badge">Baru!</span>' : ''}
                         </div>
                     </div>
                 </div>
                 <div class="testimonial-text">"${testimonial.text}"</div>
+                ${isNew ? '<div class="testimonial-time">Baru saja</div>' : ''}
             `;
             track.appendChild(card);
         });
     }
+
+    // Function to generate star rating HTML
+    function generateStars(rating) {
+        let stars = '';
+        for (let i = 0; i < 5; i++) {
+            stars += `<i class="fas fa-star ${i < rating ? 'filled' : ''}" style="color: ${i < rating ? 'gold' : '#ccc'};"></i>`;
+        }
+        return stars;
+    }
+
+    // Initial display
+    updateTestimonialsDisplay();
+
+    // Set up auto-generation every 2 seconds
+    setInterval(generateNewTestimonial, 2000);
+
+    // Make the function globally accessible for manual triggering if needed
+    window.generateNewTestimonial = generateNewTestimonial;
 }
 
-// Notifications
+// Notifications - Auto Generate Withdrawals
 function generateNotifications() {
-    const notifications = [
-        '8812*****04 epic Rp 42.300.000',
-        '7654*****12 legend Rp 28.500.000',
-        '5432*****09 mytic Rp 15.750.000',
-        '9876*****15 epic Rp 31.200.000',
-        '2345*****08 grandmaster Rp 12.800.000',
-        '6789*****11 master Rp 8.900.000',
-        '1357*****14 legend Rp 25.600.000',
-        '8642*****03 mytic Rp 18.900.000',
-        '9753*****10 epic Rp 22.400.000',
-        '2468*****07 grandmaster Rp 11.300.000'
-    ];
-    
     const scroll = document.getElementById('notificationsScroll');
-    if (scroll) {
+    if (!scroll) return;
+
+    // Array untuk menyimpan notifikasi
+    let notifications = [];
+    
+    // Load existing notifications from localStorage
+    const savedNotifications = localStorage.getItem('withdrawalNotifications');
+    if (savedNotifications) {
+        notifications = JSON.parse(savedNotifications);
+    } else {
+        // Initial notifications
+        notifications = [
+            { id: 1, maskedPhone: '8812*****04', level: 'epic', amount: 42300000, timestamp: Date.now() - 3600000 },
+            { id: 2, maskedPhone: '7654*****12', level: 'legend', amount: 28500000, timestamp: Date.now() - 7200000 },
+            { id: 3, maskedPhone: '5432*****09', level: 'mytic', amount: 15750000, timestamp: Date.now() - 10800000 },
+            { id: 4, maskedPhone: '9876*****15', level: 'epic', amount: 31200000, timestamp: Date.now() - 14400000 },
+            { id: 5, maskedPhone: '2345*****08', level: 'grandmaster', amount: 12800000, timestamp: Date.now() - 18000000 }
+        ];
+    }
+
+    // Function to generate random phone number
+    function generateRandomPhone() {
+        const prefix = Math.floor(Math.random() * 9000) + 1000;
+        const suffix = Math.floor(Math.random() * 90000) + 10000;
+        return `${prefix}*****${suffix.toString().slice(-2)}`;
+    }
+
+    // Function to generate random amount (min 5,000,000)
+    function generateRandomAmount() {
+        const min = 5000000;
+        const max = 50000000;
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // Function to generate new notification
+    function generateNewNotification() {
+        const levels = ['Master', 'Grandmaster', 'Epic', 'Legend', 'Mytic'];
+        const randomLevel = levels[Math.floor(Math.random() * levels.length)];
+        
+        const newNotification = {
+            id: Date.now(),
+            maskedPhone: generateRandomPhone(),
+            level: randomLevel,
+            amount: generateRandomAmount(),
+            timestamp: Date.now()
+        };
+        
+        // Add to beginning of array
+        notifications.unshift(newNotification);
+        
+        // Keep only last 20 notifications
+        if (notifications.length > 20) {
+            notifications = notifications.slice(0, 20);
+        }
+        
+        // Save to localStorage
+        localStorage.setItem('withdrawalNotifications', JSON.stringify(notifications));
+        
+        // Update display
+        updateNotificationsDisplay();
+    }
+
+    // Function to update display
+    function updateNotificationsDisplay() {
         scroll.innerHTML = '';
         
-        [...notifications, ...notifications].forEach(notification => {
+        // Create two sets for smooth scrolling
+        const doubledNotifications = [...notifications, ...notifications];
+        
+        doubledNotifications.forEach(notification => {
             const item = document.createElement('div');
             item.className = 'notification-item';
-            item.innerHTML = `<i class="fas fa-check-circle" style="color: var(--success); margin-right: 8px;"></i> ${notification}`;
+            item.innerHTML = `
+                <i class="fas fa-check-circle" style="color: var(--success); margin-right: 8px;"></i> 
+                ${notification.maskedPhone} 
+                <span class="level-badge level-${notification.level}">${notification.level}</span>
+                ${formatCurrency(notification.amount)}
+            `;
             scroll.appendChild(item);
         });
     }
+
+    // Initial display
+    updateNotificationsDisplay();
+
+    // Set up auto-generation every 2 seconds
+    setInterval(generateNewNotification, 2000);
+
+    // Make the function globally accessible for manual triggering if needed
+    window.generateNewNotification = generateNewNotification;
 }
 
 // Update Real-time
@@ -1268,7 +1520,7 @@ function formatCurrency(amount) {
     }).format(amount);
 }
 
-// NEW: Toast Notification Function
+// Toast Notification Function
 function showToast(message, type = 'info') {
     const toastContainer = document.getElementById('toastContainer');
     if (!toastContainer) return;
@@ -1382,6 +1634,35 @@ function filterProducts(filter) {
         `;
         productsGrid.appendChild(productCard);
     });
+}
+
+// Image Preview Function
+function previewImage(event) {
+    const file = event.target.files[0];
+    const preview = document.getElementById('imagePreview');
+    const currentImage = document.getElementById('currentImage');
+    
+    if (file) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            preview.innerHTML = `
+                <img src="${e.target.result}" alt="Preview" style="width: 100%; height: 200px; object-fit: cover; border-radius: 8px;">
+                <p style="margin-top: 10px; color: var(--success);">Gambar dipilih: ${file.name}</p>
+            `;
+            uploadedImageUrl = e.target.result; // Temporary preview
+        };
+        
+        reader.readAsDataURL(file);
+    }
+}
+
+// Remove Current Image
+function removeCurrentImage() {
+    currentProductImage = null;
+    document.getElementById('currentImage').style.display = 'none';
+    document.getElementById('imagePreview').style.display = 'block';
+    document.getElementById('productImage').value = '';
 }
 
 // Mencegah kembali ke landing page saat refresh
