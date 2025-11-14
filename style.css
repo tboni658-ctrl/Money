@@ -140,6 +140,11 @@ body {
     font-weight: 700;
 }
 
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
 .btn-full {
     width: 100%;
 }
@@ -297,12 +302,20 @@ body {
 /* Testimonials Section */
 .testimonials {
     padding: 60px 0;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* CSS untuk section title tanpa header wrapper */
+.testimonials .section-title {
+    text-align: center;
+    margin-bottom: 40px;
 }
 
 .testimonials-scroll {
     position: relative;
     overflow: hidden;
     border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .testimonials-track {
@@ -311,17 +324,26 @@ body {
     animation: scrollTestimonials 30s linear infinite;
 }
 
-@keyframes scrollTestimonials {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-}
-
 .testimonial-card {
     flex: 0 0 300px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 20px;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.testimonial-card:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--accent-cyan);
+}
+
+.testimonial-card.new {
+    background: rgba(76, 175, 80, 0.1);
+    border-color: var(--success);
+    animation: slideInTestimonial 0.5s ease-out, pulseTestimonial 2s infinite;
 }
 
 .testimonial-header {
@@ -341,17 +363,93 @@ body {
     justify-content: center;
     font-weight: 600;
     color: white;
+    font-size: 18px;
+    flex-shrink: 0;
 }
 
 .testimonial-name {
     font-weight: 600;
     color: var(--text-primary);
+    font-size: 14px;
+}
+
+.testimonial-rating {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.testimonial-rating .filled {
+    color: gold !important;
+    text-shadow: 0 0 2px rgba(255, 215, 0, 0.5);
+}
+
+.new-badge {
+    background: var(--success);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 5px;
+    animation: blink 1s infinite;
 }
 
 .testimonial-text {
     font-size: 14px;
     color: var(--text-secondary);
     line-height: 1.5;
+    font-style: italic;
+}
+
+.testimonial-time {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--success);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+}
+
+@keyframes scrollTestimonials {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+@keyframes slideInTestimonial {
+    from {
+        opacity: 0;
+        transform: translateX(-20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+
+@keyframes pulseTestimonial {
+    0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+    }
+}
+
+@keyframes blink {
+    0%, 50%, 100% { opacity: 1; }
+    25%, 75% { opacity: 0.5; }
+}
+
+.testimonials-scroll:hover .testimonials-track {
+    animation-play-state: paused;
 }
 
 /* CTA Section */
@@ -692,6 +790,8 @@ body {
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 30px;
+    position: relative;
+    overflow: hidden;
 }
 
 .withdrawal-notifications h3 {
@@ -699,6 +799,16 @@ body {
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.withdrawal-notifications h3::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
 }
 
 .notifications-scroll {
@@ -712,12 +822,84 @@ body {
     border-bottom: 1px solid var(--border);
     font-size: 14px;
     color: var(--text-secondary);
-    animation: scrollNotifications 15s linear infinite;
+    display: flex;
+    align-items: center;
+    animation: slideIn 0.5s ease-out;
+    transition: all 0.3s ease;
 }
 
-@keyframes scrollNotifications {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-100%); }
+.notification-item:hover {
+    background: rgba(0, 188, 212, 0.1);
+    padding-left: 10px;
+}
+
+.notification-item.new {
+    background: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid var(--success);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Level badges */
+.notification-item .level-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 5px;
+    text-transform: uppercase;
+}
+
+.level-master {
+    background: rgba(33, 150, 243, 0.2);
+    color: #2196F3;
+}
+
+.level-grandmaster {
+    background: rgba(156, 39, 176, 0.2);
+    color: #9C27B0;
+}
+
+.level-epic {
+    background: rgba(255, 152, 0, 0.2);
+    color: #FF9800;
+}
+
+.level-legend {
+    background: rgba(244, 67, 54, 0.2);
+    color: #F44336;
+}
+
+.level-mytic {
+    background: rgba(255, 193, 7, 0.2);
+    color: #FFC107;
+}
+
+/* Pulse animation for new notifications */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+    }
+}
+
+.notification-item.new {
+    animation: slideIn 0.5s ease-out, pulse 2s infinite;
 }
 
 /* Withdraw Section */
@@ -1303,6 +1485,96 @@ body {
     display: flex;
     gap: 10px;
     margin-top: 20px;
+}
+
+/* Image Upload Styles */
+.image-upload-container {
+    position: relative;
+    margin-top: 10px;
+}
+
+#productImage {
+    display: none;
+}
+
+.image-preview {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.image-preview:hover {
+    border-color: var(--accent-cyan);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.image-preview i {
+    font-size: 48px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.image-preview p {
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.current-image {
+    position: relative;
+    margin-top: 10px;
+}
+
+.current-image img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+
+.btn-remove-image {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(244, 67, 54, 0.9);
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.btn-remove-image:hover {
+    background: var(--error);
+    transform: scale(1.1);
+}
+
+/* Loading indicator for upload */
+.uploading {
+    position: relative;
+    pointer-events: none;
+}
+
+.uploading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 30px;
+    height: 30px;
+    margin: -15px 0 0 -15px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top: 3px solid var(--accent-cyan);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
 }
 
 /* Upgrade Modal */
