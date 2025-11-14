@@ -14,6 +14,7 @@ const firebaseConfig = {
 class FirebaseService {
   constructor() {
     this.db = null;
+    this.app = null;
     this.initialized = false;
     this.listeners = new Map();
   }
@@ -27,8 +28,8 @@ class FirebaseService {
       const { getDatabase, ref, onValue, set, get, update, remove } = await import('https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js');
 
       // Initialize Firebase
-      const app = initializeApp(firebaseConfig);
-      this.db = getDatabase(app);
+      this.app = initializeApp(firebaseConfig);
+      this.db = getDatabase(this.app);
       this.initialized = true;
 
       console.log('✅ Firebase connected successfully!');
@@ -43,6 +44,11 @@ class FirebaseService {
       this.initialized = false;
       return false;
     }
+  }
+
+  // Get Firebase app instance for Storage
+  getApp() {
+    return this.app;
   }
 
   // Initialize data dari localStorage ke Firebase
